@@ -1,0 +1,6 @@
+agents/ficheros/
+agents/core/generated_documents/
+database/chroma_db
+database/padres_store
+skills/
+frontend/ 
