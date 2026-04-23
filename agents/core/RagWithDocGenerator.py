@@ -64,62 +64,81 @@ def informacion_rag(query: str):
     retriever = crear_retriever(vectorstore)
     resultado = retriever.invoke(query)
     
-    # Mostrar información de debug
-    resultado2 = vectorstore.similarity_search_with_score(query, k=4)
-    for indice, documento in enumerate(resultado2):
-        print(f"📄 Documento {indice}: {documento[0].metadata.get('source', 'unknown')} (score: {documento[1]:.4f})")
-    
     return resultado
 
 
-async def main():
-    # Conectar al MCP de document-generator
-    client = MultiServerMCPClient({
-        "document-generator": {
-            "transport": "stdio",
-            "command": "npx",
-            "args": ["--yes", "--cache", "/tmp/.npx-cache", "document-generator-mcp@latest"]
-        }
-    })
+async def process_message_with_agent(prompt: str, use_mcp: bool = False):
+    """
+    Procesa un mensaje usando el agente RAG.
+    Esta función puede ser llamada desde CLI o desde la API.
     
-    # Obtener herramientas del MCP
-    mcp_tools = await client.get_tools()
+    Args:
+        prompt: El mensaje del usuario
+        use_mcp: Si True, incluye herramientas MCP de document-generator
     
-    print("🔧 Herramientas MCP cargadas:")
-    for tool in mcp_tools:
-        print(f"   - {tool.name}")
+    Returns:
+        Tupla (response, reasoning) con la respuesta y el razonamiento
+    """
+    if use_mcp:
+        # Conectar al MCP de document-generator
+        client = MultiServerMCPClient({
+            "document-generator": {
+                "transport": "stdio",
+                "command": "npx",
+                "args": ["--yes", "--cache", "/tmp/.npx-cache", "document-generator-mcp@latest"]
+            }
+        })
+        
+        # Obtener herramientas del MCP
+        mcp_tools = await client.get_tools()
+        todas_herramientas = [informacion_rag] + mcp_tools
+    else:
+        todas_herramientas = [informacion_rag]
     
-    # Combinar herramientas RAG + MCP
-    todas_herramientas = [informacion_rag] + mcp_tools
-    
-    # Crear agente con todas las herramientas
+    # Crear agente
     agente = create_agent(
         model=modelo,
         tools=todas_herramientas,
         system_prompt=PROMPT_SIST
     )
     
-    print("\nEscribe lo que necesites")
-    print("   - 'Escribe \"end\" para salir'\n")
+    reasoning_content = ""
+    final_response = ""
+    
+    # Stream the agent response
+    async for paso in agente.astream({
+        "messages": [
+            HumanMessage(prompt)
+        ]
+    }, stream_mode="values"):
+        ultimo_mensaje = paso["messages"][-1]
+        
+        # Extract reasoning if available
+        if hasattr(ultimo_mensaje, "additional_kwargs"):
+            reasoning = ultimo_mensaje.additional_kwargs.get("reasoning_content", "")
+            if reasoning:
+                reasoning_content = reasoning
+        
+        # Get final message content
+        if hasattr(ultimo_mensaje, "content"):
+            final_response = ultimo_mensaje.content
+    
+    return final_response, reasoning_content
+
+
+async def main():
+    print("🤖 ToolChain RAG Agent - Modo Interactivo")
+    print("   - Escribe 'end' para salir\n")
     
     while (prompt := input("> ")) != "end":
-        async for paso in agente.astream({
-            "messages": [
-                HumanMessage(prompt)
-            ]
-        }, stream_mode="values"):
-            ultimo_mensaje = paso["messages"][-1]
-            
-            hayRazonamiento = ""
-            if hasattr(ultimo_mensaje, "additional_kwargs"):
-                hayRazonamiento = ultimo_mensaje.additional_kwargs.get("reasoning_content", "")
-            
-            if hayRazonamiento:
-                print("\n=== 🧠 PENSANDO ===")
-                print(hayRazonamiento)
-            
-            print("\n=== 💬 MENSAJE ===")
-            ultimo_mensaje.pretty_print()
+        response, reasoning = await process_message_with_agent(prompt, use_mcp=True)
+        
+        if reasoning:
+            print("\n=== 🧠 PENSANDO ===")
+            print(reasoning)
+        
+        print("\n=== 💬 MENSAJE ===")
+        print(response)
 
 
 if __name__ == "__main__":

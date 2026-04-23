@@ -2,5 +2,12 @@ agents/ficheros/
 agents/core/generated_documents/
 database/chroma_db
 database/padres_store
+backend/generated_documents/
 skills/
-frontend/ 
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+backend/__pycache__/
+backend/.venv/
+backend/venv/
+agents/core/__pycache__/

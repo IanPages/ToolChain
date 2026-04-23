@@ -1,4 +1,12 @@
-# Core LangChain
+
+#Backend
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.0
+python-multipart==0.0.12
+aiofiles==24.1.0
+
+#Agentes
 langchain
 langchain-community
 langchain-text-splitters
@@ -6,7 +14,5 @@ langchain-chroma
 langchain-ollama
 langgraph
 langgraph-checkpoint-sqlite
-
-# Vector store / document loading
 chromadb
 pypdf
