@@ -1,6 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from typing import List, Optional
 import sys
 import os
@@ -9,10 +8,15 @@ import asyncio
 # Add agents directory to path to import functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents', 'core'))
 
-from createChroma import cargar_documentos, crear_embeddings, crear_vectorstore
+from createChroma import subir_ficheros, crear_embeddings, cargar_documentos_desde_bytes,BASE_DIR
 from RagWithDocGenerator import process_message_with_agent
+from classes.ChatModels import ChatMessage, ChatResponse
+from classes.FileModels import FileInfo,UploadResponse
+from datetime import datetime
+from langchain_chroma import Chroma
 
-CHROMA_DIR = "../database/chroma_db"
+
+CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "database", "chroma_db")
 COLLECTION_NAME = "pdfs"
 
 app = FastAPI(
@@ -31,36 +35,10 @@ app.add_middleware(
 )
 
 
-class FileInfo(BaseModel):
-    name: str
-    count: int
-
-
-class UploadResponse(BaseModel):
-    message: str
-    files_processed: int
-    documents_indexed: int
-
-
-class ChatMessage(BaseModel):
-    message: str
-    session_id: Optional[str] = None
-
-
-class ChatResponse(BaseModel):
-    response: str
-    session_id: str
-    timestamp: str
-
 
 @app.get("/")
 async def root():
     return {"message": "ToolChain API - RAG Integration"}
-
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
 
 
 @app.get("/files", response_model=List[FileInfo])
@@ -68,6 +46,8 @@ async def get_files():
     """
     Obtiene información sobre los archivos indexados en ChromaDB
     """
+    print(BASE_DIR)
+    print(CHROMA_DIR)
     try:
         embeddings = crear_embeddings()
         vectorstore = Chroma(
@@ -75,14 +55,15 @@ async def get_files():
             collection_name=COLLECTION_NAME,
             embedding_function=embeddings,
         )
-        
+
         # Get collection metadata
         collection = vectorstore._collection
         count = collection.count()
-        
+
         # Try to get unique source files from metadata
         if count > 0:
             results = collection.get(include=["metadatas"])
+
             unique_sources = set()
             for metadata in results.get("metadatas", []):
                 if metadata and "source" in metadata:
@@ -90,14 +71,14 @@ async def get_files():
                     # Extract filename from path
                     filename = os.path.basename(source) if source else "unknown"
                     unique_sources.add(filename)
-            
+
             return [
                 FileInfo(name=source, count=count // len(unique_sources) if unique_sources else count)
                 for source in unique_sources
             ]
-        
+
         return []
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener archivos: {str(e)}")
 
@@ -109,35 +90,44 @@ async def upload_files(files: List[UploadFile] = File(...)):
     """
     if not files:
         raise HTTPException(status_code=400, detail="No se proporcionaron archivos")
-    
+
     documents_processed = 0
     total_documents = 0
-    
+
     try:
-        embeddings = crear_embeddings()
-        
+        todos_documentos = []
+        print(f"Archivos recibidos: {len(files)}")
         for file in files:
             if not file.filename.lower().endswith('.pdf'):
+                print(f"Archivo ignorado (no PDF): {file.filename}")
                 continue
-            
+
             # Read file content
             content = await file.read()
-            
+            print(f"Archivo leído: {file.filename}, tamaño: {len(content)} bytes")
+
             # Load documents using the function from createChroma
-            documentos = cargar_documentos_archivo(content, file.filename)
+            documentos = cargar_documentos_desde_bytes(content, file.filename)
+            print(f"Documentos cargados: {len(documentos)}")
+
+            # Add metadata with filename
+            for doc in documentos:
+                doc.metadata["source"] = file.filename
+            todos_documentos.extend(documentos)
             documents_processed += len(documentos)
             total_documents += len(documentos)
-        
+
+        print(f"Total documentos a procesar: {total_documents}")
         if total_documents > 0:
-            # Create or update vectorstore
-            crear_vectorstore(embeddings, documentos)
-        
+            # Process documents using subir_ficheros
+            subir_ficheros(todos_documentos)
+
         return UploadResponse(
             message=f"Se procesaron {len(files)} archivo(s) correctamente",
             files_processed=len(files),
             documents_indexed=total_documents
         )
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar archivos: {str(e)}")
 
@@ -149,43 +139,22 @@ async def chat(chat_message: ChatMessage):
     """
     try:
         # Usar la función reutilizable de RagWithDocGenerator
-        response, reasoning = await process_message_with_agent(
-            chat_message.message, 
-            use_mcp=True  # Sin MCP para la API básica
+        response = await process_message_with_agent(
+            chat_message.message,
+            use_mcp=True,
+            thread_id=chat_message.session_id
         )
-        
-        from datetime import datetime
-        
+        print(chat_message.session_id)
+
+
         return ChatResponse(
             response=response,
             session_id=chat_message.session_id or str(hash(chat_message.message)),
             timestamp=datetime.now().isoformat()
         )
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar el chat: {str(e)}")
-
-
-##PROBAR SI FUNCIONA SUBIR FICHEROS####
-
-def cargar_documentos_archivo(archivo_bytes: bytes, nombre_archivo: str):
-    """
-    Función auxiliar para cargar documentos desde bytes
-    """
-    import tempfile
-    from langchain_community.document_loaders import PyPDFLoader
-    
-    extension = os.path.splitext(nombre_archivo)[1] or '.pdf'
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
-        tmp.write(archivo_bytes)
-        tmp_path = tmp.name
-    
-    loader = PyPDFLoader(tmp_path)
-    documentos = loader.load()
-    
-    os.unlink(tmp_path)
-    return documentos
 
 
 # Session storage for chat history (in-memory, replace with Redis for production)

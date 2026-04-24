@@ -3,7 +3,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_agent
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_chroma import Chroma
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain.tools import tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -12,6 +12,13 @@ CHROMA_DIR = "../../database/chroma_db"
 COLLECTION_NAME = "pdfs"
 
 modelo = ChatOllama(model="gemma4:26b", reasoning=True)
+
+######
+
+#SQLITESAVER PARA EL CHECKPOINTER
+
+#######
+thread_history = {}
 
 PROMPT_SIST = """
     Eres un asistente inteligente que puede:
@@ -67,15 +74,16 @@ def informacion_rag(query: str):
     return resultado
 
 
-async def process_message_with_agent(prompt: str, use_mcp: bool = False):
+async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_id: str = None):
     """
     Procesa un mensaje usando el agente RAG.
     Esta función puede ser llamada desde CLI o desde la API.
-    
+
     Args:
         prompt: El mensaje del usuario
         use_mcp: Si True, incluye herramientas MCP de document-generator
-    
+        thread_id: ID del hilo de conversación para persistencia del historial
+
     Returns:
         Tupla (response, reasoning) con la respuesta y el razonamiento
     """
@@ -88,41 +96,55 @@ async def process_message_with_agent(prompt: str, use_mcp: bool = False):
                 "args": ["--yes", "--cache", "/tmp/.npx-cache", "document-generator-mcp@latest"]
             }
         })
-        
+
         # Obtener herramientas del MCP
         mcp_tools = await client.get_tools()
         todas_herramientas = [informacion_rag] + mcp_tools
     else:
         todas_herramientas = [informacion_rag]
-    
+
     # Crear agente
     agente = create_agent(
         model=modelo,
         tools=todas_herramientas,
         system_prompt=PROMPT_SIST
     )
-    
+
     reasoning_content = ""
     final_response = ""
-    
+
+    # Obtener o crear historial de mensajes para el thread_id
+    if thread_id:
+        if thread_id not in thread_history:
+            thread_history[thread_id] = []
+        messages = thread_history[thread_id]
+    else:
+        messages = []
+
+    # Agregar el nuevo mensaje del usuario
+    messages.append(HumanMessage(prompt))
+
     # Stream the agent response
     async for paso in agente.astream({
-        "messages": [
-            HumanMessage(prompt)
-        ]
+        "messages": messages
     }, stream_mode="values"):
         ultimo_mensaje = paso["messages"][-1]
-        
+
         # Extract reasoning if available
         if hasattr(ultimo_mensaje, "additional_kwargs"):
             reasoning = ultimo_mensaje.additional_kwargs.get("reasoning_content", "")
             if reasoning:
                 reasoning_content = reasoning
-        
+
         # Get final message content
         if hasattr(ultimo_mensaje, "content"):
             final_response = ultimo_mensaje.content
-    
+
+    # Agregar la respuesta del asistente al historial
+    if thread_id:
+        messages.append(AIMessage(final_response))
+        thread_history[thread_id] = messages
+
     return final_response, reasoning_content
 
 
