@@ -121,22 +121,13 @@ async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_
     else:
         messages = []
 
-    # Agregar el nuevo mensaje del usuario
     messages.append(HumanMessage(prompt))
 
-    # Stream the agent response
     async for paso in agente.astream({
         "messages": messages
     }, stream_mode="values"):
         ultimo_mensaje = paso["messages"][-1]
 
-        # Extract reasoning if available
-        if hasattr(ultimo_mensaje, "additional_kwargs"):
-            reasoning = ultimo_mensaje.additional_kwargs.get("reasoning_content", "")
-            if reasoning:
-                reasoning_content = reasoning
-
-        # Get final message content
         if hasattr(ultimo_mensaje, "content"):
             final_response = ultimo_mensaje.content
 
@@ -145,7 +136,7 @@ async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_
         messages.append(AIMessage(final_response))
         thread_history[thread_id] = messages
 
-    return final_response, reasoning_content
+    return final_response
 
 
 async def main():
