@@ -4,6 +4,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
+import ocrmypdf
 
 
 
@@ -27,7 +28,7 @@ def cargar_documentos(fichero: str):
 def cargar_documentos_desde_bytes(archivo_bytes: bytes, nombre_archivo: str):
     """
     Carga documentos desde bytes (para archivos subidos desde la API).
-    Crea un archivo temporal, lo procesa y lo elimina.
+    Si el PDF no tiene texto extraíble (escaneado), aplica OCR automáticamente.
 
     Args:
         archivo_bytes: Contenido del archivo en bytes
@@ -37,16 +38,40 @@ def cargar_documentos_desde_bytes(archivo_bytes: bytes, nombre_archivo: str):
         Lista de documentos LangChain
     """
     extension = os.path.splitext(nombre_archivo)[1] or '.pdf'
+    tmp_paths = []
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
-        tmp.write(archivo_bytes)
-        tmp_path = tmp.name
+    try:
+        # Guardar PDF original temporalmente
+        with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
+            tmp.write(archivo_bytes)
+            tmp_path = tmp.name
+            tmp_paths.append(tmp_path)
 
-    loader = PyPDFLoader(tmp_path)
-    documentos = loader.load()
+        loader = PyPDFLoader(tmp_path)
+        documentos = loader.load()
 
-    os.unlink(tmp_path)
-    return documentos
+        # Verificar si tiene texto extraíble (si está vacío, es un escaneo)
+        texto_total = "".join([doc.page_content for doc in documentos]).strip()
+        if not texto_total:
+            # Aplicar OCR al PDF escaneado
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_ocr:
+                tmp_ocr_path = tmp_ocr.name
+                tmp_paths.append(tmp_ocr_path)
+
+            ocrmypdf.ocr(tmp_path, tmp_ocr_path, force_ocr=True, progress_bar=False)
+
+            # Recargar con el PDF que ahora tiene texto
+            loader = PyPDFLoader(tmp_ocr_path)
+            documentos = loader.load()
+
+        return documentos
+    finally:
+        # Limpiar archivos temporales
+        for path in tmp_paths:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 """
 Creamos los embeddings
