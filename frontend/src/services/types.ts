@@ -17,12 +17,9 @@ export interface ChatResponse {
 }
 
 export interface FileUploadResponse {
-  id: string
-  name: string
-  size: number
-  uploadedAt: Date
-  status: 'success' | 'error'
-  error?: string
+  message: string,
+  files_processed: number,
+  documents_indexed: number
 }
 
 export interface DocumentGenerationResponse {
@@ -41,4 +38,16 @@ export interface ApiError {
 export interface FileInfo {
   name: string
   count: number
+}
+
+export interface UploadResponse {
+  message: string
+  files_processed: number
+  documents_indexed: number
+}
+
+export interface DeleteResponse {
+  message: string
+  file_deleted: string
+  documents_removed: number
 }

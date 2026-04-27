@@ -12,3 +12,4 @@ backend/classes/__pycache__/
 backend/.venv/
 backend/venv/
 agents/core/__pycache__/
+.windsurf

@@ -106,9 +106,48 @@ def subir_ficheros(documentos):
     print("...Embeddings creados...")
 
     vectorstore = crear_vectorstore(embeddings, documentos)
-    print(f"✅ Indexados {len(documentos)} documentos en ChromaDB")
+    print(f" Indexados {len(documentos)} documentos en ChromaDB")
 
     return vectorstore
+
+
+def eliminar_documento_por_nombre(nombre_archivo: str):
+    """
+    Elimina todos los documentos y sus vectorizaciones de ChromaDB 
+    que correspondan a un nombre de archivo específico.
+
+    Args:
+        nombre_archivo: Nombre del archivo a eliminar (solo nombre, sin ruta)
+
+    Returns:
+        int: Número de documentos eliminados
+    """
+    embeddings = crear_embeddings()
+    vectorstore = Chroma(
+        persist_directory=CHROMA_DIR,
+        collection_name=COLLECTION_NAME,
+        embedding_function=embeddings,
+    )
+    
+    # Obtener la colección para buscar documentos por metadata
+    collection = vectorstore._collection
+    
+    # Buscar documentos que tengan el nombre de archivo en su metadata
+    # Primero obtenemos solo los IDs para poder eliminar
+    results_ids = collection.get(
+        where={"source": nombre_archivo}
+    )
+    
+    documentos_eliminados = 0
+    if results_ids["ids"]:
+        # Eliminar los documentos por sus IDs
+        collection.delete(ids=results_ids["ids"])
+        documentos_eliminados = len(results_ids["ids"])
+        print(f"Eliminados {documentos_eliminados} documentos del archivo '{nombre_archivo}'")
+    else:
+        print(f"No se encontraron documentos para el archivo '{nombre_archivo}'")
+    
+    return documentos_eliminados
 
 
 RUTA_DATOS = "../ficheros/"

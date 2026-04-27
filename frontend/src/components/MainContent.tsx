@@ -12,8 +12,9 @@ import {
 } from 'lucide-react'
 import type { Message, UploadedFile } from '../App'
 import { sendMessage } from '../services/chatService'
-import { getFiles } from '../services/docsService'
-import { useState, useEffect } from 'react'
+import { getFiles, uploadFiles } from '../services/docsService'
+import { useState, useEffect, useCallback } from 'react'
+import { deleteFile } from '../services/docsService'
 
 interface MainContentProps {
   messages: Message[]
@@ -33,23 +34,7 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
 
   // Cargar archivos desde la API al montar el componente
-  useEffect(() => {
-    const loadFiles = async () => {
-      try {
-        const files = await getFiles()
-        const convertedFiles: UploadedFile[] = files.map(file => ({
-          id: file.name,
-          name: file.name, // La API no devuelve el tamaño
-          uploadedAt: new Date()
-        }))
-        setUploadedFiles(convertedFiles)
-      } catch (error) {
-        console.error('Error al cargar archivos:', error)
-      }
-    }
-    
-    loadFiles()
-  }, [])
+  
 
   const handleSendMessage = async () => {
     const messageContent = inputValue.trim()
@@ -88,23 +73,65 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
     }
   } 
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
 
-    Array.from(files).forEach(file => {
-      const newFile: UploadedFile = {
-        id: Date.now().toString() + Math.random(),
-        name: file.name,
-        uploadedAt: new Date()
+    setIsProcessing(true)
+    
+    try {
+      const fileList = Array.from(files)
+      const response = await uploadFiles(fileList)
+      
+      // Add files to local state with proper IDs from backend response
+      fileList.forEach(file => {
+        const newFile: UploadedFile = {
+          id: file.name,
+          name: file.name,
+          uploadedAt: new Date()
+        }
+        setUploadedFiles(prev => [...prev, newFile])
+      })
+
+      // Show success message
+      const successMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        role: 'assistant',
+        content: `${response.message}\n\nSe procesaron ${response.files_processed} archivos y se indexaron ${response.documents_indexed} documentos.`,
+        timestamp: new Date()
       }
-      setUploadedFiles(prev => [...prev, newFile])
-    })
+      setMessages(prev => [...prev, successMessage])
+
+    } catch (error) {
+      console.error('Error uploading files:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        role: 'assistant',
+        content: `Error al subir los archivos: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
-  const handleDeleteFile = (id: string) => {
-    setUploadedFiles(prev => prev.filter(f => f.id !== id))
-  }
+  const handleDeleteFile = useCallback(async (filename: string) => {
+    try {
+      const result = await deleteFile(filename)
+      console.log(`Eliminados ${result.documents_removed} documentos`)
+      // Recargar la lista de archivos después de eliminar
+      const files = await getFiles()
+      const convertedFiles: UploadedFile[] = files.map(file => ({
+        id: file.name,
+        name: file.name,
+        uploadedAt: new Date()
+      }))
+      setUploadedFiles(convertedFiles)
+    } catch (error) {
+      console.error('Error al eliminar:', error.message)
+    }
+  }, [])
 
   const handleGenerateSummary = () => {
     setIsProcessing(true)
@@ -119,6 +146,24 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
       setIsProcessing(false)
     }, 1500)
   }
+
+  useEffect(() => {
+    const loadFiles = async () => {
+      try {
+        const files = await getFiles()
+        const convertedFiles: UploadedFile[] = files.map(file => ({
+          id: file.name,
+          name: file.name, // La API no devuelve el tamaño
+          uploadedAt: new Date()
+        }))
+        setUploadedFiles(convertedFiles)
+      } catch (error) {
+        console.error('Error al cargar archivos:', error)
+      }
+    }
+    
+    loadFiles()
+  }, [])
 
   return (
     <main className="main-content">
@@ -251,7 +296,7 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
                       </div>
                     </div>
                     <button 
-                      onClick={() => handleDeleteFile(file.id)}
+                      onClick={() => handleDeleteFile(file.name)}
                       className="delete-button"
                     >
                       <Trash2 />

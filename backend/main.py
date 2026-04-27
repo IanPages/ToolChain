@@ -8,10 +8,10 @@ import asyncio
 # Add agents directory to path to import functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents', 'core'))
 
-from createChroma import subir_ficheros, crear_embeddings, cargar_documentos_desde_bytes,BASE_DIR
+from createChroma import subir_ficheros, crear_embeddings, cargar_documentos_desde_bytes, eliminar_documento_por_nombre, BASE_DIR
 from RagWithDocGenerator import process_message_with_agent
 from classes.ChatModels import ChatMessage, ChatResponse
-from classes.FileModels import FileInfo,UploadResponse
+from classes.FileModels import FileInfo, UploadResponse, DeleteResponse
 from datetime import datetime
 from langchain_chroma import Chroma
 
@@ -130,6 +130,42 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar archivos: {str(e)}")
+
+
+@app.delete("/delete/{filename}", response_model=DeleteResponse)
+async def delete_file(filename: str):
+    """
+    Elimina un archivo y todas sus vectorizaciones de ChromaDB
+    """
+    try:
+        # Decodificar el filename para manejar espacios y caracteres especiales
+        from urllib.parse import unquote
+        filename_decoded = unquote(filename)
+        
+        print(f"Buscando archivo para eliminar: '{filename_decoded}'")
+        
+        # Eliminar documentos de ChromaDB
+        documentos_eliminados = eliminar_documento_por_nombre(filename_decoded)
+        
+        if documentos_eliminados == 0:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No se encontraron documentos para el archivo '{filename_decoded}'"
+            )
+        
+        return DeleteResponse(
+            message=f"Archivo '{filename_decoded}' eliminado correctamente",
+            file_deleted=filename_decoded,
+            documents_removed=documentos_eliminados
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error al eliminar el archivo: {str(e)}"
+        )
 
 
 @app.post("/chat", response_model=ChatResponse)
