@@ -6,6 +6,7 @@ from langchain_chroma import Chroma
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain.tools import tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+import re
 
 
 CHROMA_DIR = "../../database/chroma_db"
@@ -30,6 +31,11 @@ PROMPT_SIST = """
     - Luego usa las herramientas de generación de documentos (gerar_documento_word o gerar_documento_pdf)
     - Asegúrate de pasar la información encontrada como contenido del documento
     
+    IMPORTANTE - Cuando el usuario mencione archivos específicos (ej: "resumen de documento.pdf"):
+    - Debes usar el parámetro 'sources' en informacion_rag para filtrar por esos archivos
+    - Pasa sources como una lista con los nombres exactos de los archivos mencionados
+    - Ejemplo: informacion_rag(query="resumen", sources=["documento.pdf", "otro.pdf"])
+    
     No inventes información que no esté en la base de datos vectorial.
     Devuelve todas las respuestas en español.
     """
@@ -52,13 +58,15 @@ def crear_retriever(vectorstore: Chroma):
 
 
 @tool
-def informacion_rag(query: str):
+def informacion_rag(query: str, sources: list = None):
     """
     Función que devuelve información almacenada en el RAG.
     Úsala cuando necesites buscar información específica en los documentos indexados.
     
     Args:
         query: La consulta de búsqueda sobre la información que necesitas encontrar
+        sources: Lista opcional de nombres de archivos/fuentes para filtrar la búsqueda.
+                Si se proporciona, solo buscará en documentos de esas fuentes.
     
     Returns:
         Lista de documentos relevantes con su contenido y metadatos
@@ -68,8 +76,29 @@ def informacion_rag(query: str):
         collection_name=COLLECTION_NAME,
         embedding_function=crear_embeddings(),
     )
-    retriever = crear_retriever(vectorstore)
+    
+    #Buscamos top 10
+    search_kwargs = {"k": 10}  
+    
+    retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs=search_kwargs
+    )
     resultado = retriever.invoke(query)
+    
+    # Si se especifican fuentes, filtrar manualmente los resultados
+    if sources:
+        resultado_filtrado = []
+        for doc in resultado:
+            doc_source = doc.metadata.get("source", "")
+            # Verificar si el source contiene alguno de los nombres de archivo buscados
+            for source_pattern in sources:
+                if source_pattern in doc_source:
+                    resultado_filtrado.append(doc)
+                    break
+        resultado = resultado_filtrado[:4] 
+    else:
+        resultado = resultado[:4]
     
     return resultado
 
@@ -140,17 +169,17 @@ async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_
 
 
 async def main():
-    print("🤖 ToolChain RAG Agent - Modo Interactivo")
+    print("ToolChain RAG Agent - Modo Interactivo")
     print("   - Escribe 'end' para salir\n")
     
     while (prompt := input("> ")) != "end":
         response, reasoning = await process_message_with_agent(prompt, use_mcp=True)
         
         if reasoning:
-            print("\n=== 🧠 PENSANDO ===")
+            print("\n=== PENSANDO ===")
             print(reasoning)
         
-        print("\n=== 💬 MENSAJE ===")
+        print("\n=== MENSAJE ===")
         print(response)
 
 

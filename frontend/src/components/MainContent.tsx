@@ -15,6 +15,7 @@ import { sendMessage } from '../services/chatService'
 import { getFiles, uploadFiles } from '../services/docsService'
 import { useState, useEffect, useCallback } from 'react'
 import { deleteFile } from '../services/docsService'
+import FileSelectionModal from './FileSelectionModal'
 
 interface MainContentProps {
   messages: Message[]
@@ -32,6 +33,7 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
 
 {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
 
   // Cargar archivos desde la API al montar el componente
   
@@ -134,17 +136,45 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
   }, [])
 
   const handleGenerateSummary = () => {
+    setIsSummaryModalOpen(true)
+  }
+
+  const handleSummarySubmit = async (selectedFiles: UploadedFile[]) => {
+    setIsSummaryModalOpen(false)
+    
+    const fileNames = selectedFiles.map(f => f.name).join(', ')
+    const messageContent = `Generame un resumen con los ficheros ${fileNames} y después creame un fichero PDF con el contenido.`
+    
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: messageContent,
+      timestamp: new Date()
+    }
+    
+    setMessages(prev => [...prev, newMessage])
     setIsProcessing(true)
-    setTimeout(() => {
+    
+    try {
+      const response = await sendMessage(messageContent, sessionId)
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '**Resumen generado**\n\nHe analizado los documentos subidos y creado un resumen estructurado de los puntos clave.',
-        timestamp: new Date()
+        content: response.response,
+        timestamp: new Date(response.timestamp)
       }
       setMessages(prev => [...prev, aiResponse])
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Error al generar el resumen. Por favor, intenta nuevamente.',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
       setIsProcessing(false)
-    }, 1500)
+    }
   }
 
   useEffect(() => {
@@ -343,6 +373,13 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
           </div>
         </div>
       </aside>
+
+      <FileSelectionModal
+        isOpen={isSummaryModalOpen}
+        onClose={() => setIsSummaryModalOpen(false)}
+        files={uploadedFiles}
+        onSubmit={handleSummarySubmit}
+      />
     </main>
   )
 }
