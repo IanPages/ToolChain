@@ -21,10 +21,6 @@ function Header({ sidebarOpen, toggleSidebar }: HeaderProps) {
           >
             {sidebarOpen ? <ChevronLeft /> : <Menu />}
           </button>
-          <div className="header-status">
-            <div className="status-dot"></div>
-            <span>Conectado</span>
-          </div>
         </div>
       </div>
     </header>

@@ -13,9 +13,12 @@ import {
 import type { Message, UploadedFile } from '../App'
 import { sendMessage } from '../services/chatService'
 import { getFiles, uploadFiles } from '../services/docsService'
+import { generateSummary } from '../services/toolsService'
+import { getGeneratedFiles, deleteGeneratedFile } from '../services/generatedDocsService'
 import { useState, useEffect, useCallback } from 'react'
 import { deleteFile } from '../services/docsService'
 import FileSelectionModal from './FileSelectionModal'
+import PdfViewerModal from './PdfViewerModal'
 
 interface MainContentProps {
   messages: Message[]
@@ -29,11 +32,12 @@ interface MainContentProps {
   sessionId: string
 }
 
-function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing,setIsProcessing,sidebarOpen,setSidebarOpen,sessionId}: MainContentProps)
-
-{
+function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing,setIsProcessing,sidebarOpen,setSidebarOpen,sessionId}: MainContentProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const [generatedFiles, setGeneratedFiles] = useState<UploadedFile[]>([])
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false)
+  const [selectedPdf, setSelectedPdf] = useState<{ url: string; name: string } | null>(null)
 
   // Cargar archivos desde la API al montar el componente
   
@@ -62,6 +66,16 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
         timestamp: new Date(response.timestamp)
       }
       setMessages(prev => [...prev, aiResponse])
+      
+      // Recargar archivos generados por si la IA creó nuevos archivos
+      const generated = await getGeneratedFiles()
+      const convertedGenerated: UploadedFile[] = generated.map(file => ({
+        id: file.name,
+        name: file.name,
+        uploadedAt: new Date()
+      }))
+      setGeneratedFiles(convertedGenerated)
+      
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -135,6 +149,30 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
     }
   }, [])
 
+  const handleDeleteGeneratedFile = useCallback(async (filename: string) => {
+    try {
+      const result = await deleteGeneratedFile(filename)
+      console.log(`Eliminados ${result.documents_removed} documentos generados`)
+      // Recargar la lista de archivos generados después de eliminar
+      const files = await getGeneratedFiles()
+      const convertedFiles: UploadedFile[] = files.map(file => ({
+        id: file.name,
+        name: file.name,
+        uploadedAt: new Date()
+      }))
+      setGeneratedFiles(convertedFiles)
+    } catch (error) {
+      console.error('Error al eliminar archivo generado:', error.message)
+    }
+  }, [])
+
+  const handleFileClick = (filename: string) => {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+    const fileUrl = `${API_BASE_URL}/generated-files/${encodeURIComponent(filename)}`
+    setSelectedPdf({ url: fileUrl, name: filename })
+    setIsPdfModalOpen(true)
+  }
+
   const handleGenerateSummary = () => {
     setIsSummaryModalOpen(true)
   }
@@ -143,7 +181,7 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
     setIsSummaryModalOpen(false)
     
     const fileNames = selectedFiles.map(f => f.name).join(', ')
-    const messageContent = `Generame un resumen con los ficheros ${fileNames} y después creame un fichero PDF con el contenido.`
+    const messageContent = `Generame un resumen detallado y extenso con los ficheros ${fileNames} y después creame un fichero PDF con el contenido generado.`
     
     const newMessage: Message = {
       id: Date.now().toString(),
@@ -156,19 +194,23 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
     setIsProcessing(true)
     
     try {
-      const response = await sendMessage(messageContent, sessionId)
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.response,
-        timestamp: new Date(response.timestamp)
-      }
+      const aiResponse = await generateSummary(selectedFiles, sessionId)
       setMessages(prev => [...prev, aiResponse])
+      
+      // Recargar archivos generados después de que la IA complete la tarea
+      const generated = await getGeneratedFiles()
+      const convertedGenerated: UploadedFile[] = generated.map(file => ({
+        id: file.name,
+        name: file.name,
+        uploadedAt: new Date()
+      }))
+      setGeneratedFiles(convertedGenerated)
+      
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Error al generar el resumen. Por favor, intenta nuevamente.',
+        content: error instanceof Error ? error.message : 'Error al generar el resumen. Por favor, intenta nuevamente.',
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -180,6 +222,7 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
   useEffect(() => {
     const loadFiles = async () => {
       try {
+        // Cargar archivos subidos
         const files = await getFiles()
         const convertedFiles: UploadedFile[] = files.map(file => ({
           id: file.name,
@@ -187,6 +230,15 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
           uploadedAt: new Date()
         }))
         setUploadedFiles(convertedFiles)
+        
+        // Cargar archivos generados
+        const generated = await getGeneratedFiles()
+        const convertedGenerated: UploadedFile[] = generated.map(file => ({
+          id: file.name,
+          name: file.name,
+          uploadedAt: new Date()
+        }))
+        setGeneratedFiles(convertedGenerated)
       } catch (error) {
         console.error('Error al cargar archivos:', error)
       }
@@ -283,6 +335,7 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
         >
           <X />
         </button>
+        
         {/* Files Section */}
         <div className="sidebar-section">
           <div className="panel-header">
@@ -338,8 +391,60 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
           </div>
         </div>
 
-        {/* Actions Section */}
+        {/* Generated Files Section */}
         <div className="sidebar-section">
+          <div className="panel-header">
+            <FileText className="panel-icon" />
+            <h2>Archivos Generados</h2>
+          </div>
+          
+          <div className="files-list">
+            <AnimatePresence>
+              {generatedFiles.length === 0 ? (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="empty-files"
+                >
+                  <FileText className="empty-icon" />
+                  <p>No hay archivos generados</p>
+                </motion.div>
+              ) : (
+                generatedFiles.map((file) => (
+                  <motion.div
+                    key={file.id}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="file-item clickable"
+                    onClick={() => handleFileClick(file.name)}
+                    title="Clic para ver el archivo"
+                  >
+                    <div className="file-info">
+                      <FileDown className="file-icon" />
+                      <div className="file-details">
+                        <span className="file-name">{file.name}</span>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteGeneratedFile(file.name)
+                      }}
+                      className="delete-button"
+                      title="Eliminar archivo"
+                    >
+                      <Trash2 />
+                    </button>
+                  </motion.div>
+                ))
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Actions Section */}
+        <div className="sidebar-section actions-section">
           <div className="panel-header">
             <Sparkles className="panel-icon" />
             <h2>Acciones</h2>
@@ -379,6 +484,13 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
         onClose={() => setIsSummaryModalOpen(false)}
         files={uploadedFiles}
         onSubmit={handleSummarySubmit}
+      />
+
+      <PdfViewerModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        pdfUrl={selectedPdf?.url || ''}
+        fileName={selectedPdf?.name || ''}
       />
     </main>
   )
