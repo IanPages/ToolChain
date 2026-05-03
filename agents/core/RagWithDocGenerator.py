@@ -6,13 +6,14 @@ from langchain_chroma import Chroma
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain.tools import tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-import re
+import os
 
 
-CHROMA_DIR = "../../database/chroma_db"
+CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "database", "chroma_db")
 COLLECTION_NAME = "pdfs"
 
-modelo = ChatOllama(model="gemma4:26b", reasoning=True)
+#modelo = ChatOllama(model="gemma4:26b", reasoning=True)
+modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
 
 ######
 
@@ -71,12 +72,15 @@ def informacion_rag(query: str, sources: list = None):
     Returns:
         Lista de documentos relevantes con su contenido y metadatos
     """
+
+    print(f"[RAG DEBUG] '{query}'")
+
     vectorstore = Chroma(
         persist_directory=CHROMA_DIR,
         collection_name=COLLECTION_NAME,
         embedding_function=crear_embeddings(),
     )
-    
+
     #Buscamos top 10
     search_kwargs = {"k": 10}  
     
@@ -85,7 +89,9 @@ def informacion_rag(query: str, sources: list = None):
         search_kwargs=search_kwargs
     )
     resultado = retriever.invoke(query)
-    
+    print(f"[RAG DEBUG] Documentos encontrados: {len(resultado)}")
+
+
     # Si se especifican fuentes, filtrar manualmente los resultados
     if sources:
         resultado_filtrado = []
@@ -97,11 +103,11 @@ def informacion_rag(query: str, sources: list = None):
                     resultado_filtrado.append(doc)
                     break
         resultado = resultado_filtrado[:4] 
+        print(f"[RAG DEBUG] Documentos después de filtrar por sources: {len(resultado)}")
     else:
         resultado = resultado[:4]
     
     return resultado
-
 
 async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_id: str = None):
     """
@@ -116,57 +122,60 @@ async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_
     Returns:
         Tupla (response, reasoning) con la respuesta y el razonamiento
     """
-    if use_mcp:
-        # Conectar al MCP de document-generator
-        client = MultiServerMCPClient({
-            "document-generator": {
-                "transport": "stdio",
-                "command": "npx",
-                "args": ["--yes", "--cache", "/tmp/.npx-cache", "document-generator-mcp@latest"]
-            }
-        })
+    try:
+        if use_mcp:
+            # Conectar al MCP de document-generator
+            client = MultiServerMCPClient({
+                "document-generator": {
+                    "transport": "stdio",
+                    "command": "npx",
+                    "args": ["--yes", "--cache", "/tmp/.npx-cache", "document-generator-mcp@latest"]
+                }
+            })
 
-        # Obtener herramientas del MCP
-        mcp_tools = await client.get_tools()
-        todas_herramientas = [informacion_rag] + mcp_tools
-    else:
-        todas_herramientas = [informacion_rag]
+            # Obtener herramientas del MCP
+            mcp_tools = await client.get_tools()
+            todas_herramientas = [informacion_rag] + mcp_tools
+        else:
+            todas_herramientas = [informacion_rag]
 
-    # Crear agente
-    agente = create_agent(
-        model=modelo,
-        tools=todas_herramientas,
-        system_prompt=PROMPT_SIST
-    )
+        # Crear agente
+        agente = create_agent(
+            model=modelo,
+            tools=todas_herramientas,
+            system_prompt=PROMPT_SIST
+        )
 
-    reasoning_content = ""
-    final_response = ""
+        reasoning_content = ""
+        final_response = ""
 
-    # Obtener o crear historial de mensajes para el thread_id
-    if thread_id:
-        if thread_id not in thread_history:
-            thread_history[thread_id] = []
-        messages = thread_history[thread_id]
-    else:
-        messages = []
+        # Obtener o crear historial de mensajes para el thread_id
+        if thread_id:
+            if thread_id not in thread_history:
+                thread_history[thread_id] = []
+            messages = thread_history[thread_id]
+        else:
+            messages = []
 
-    messages.append(HumanMessage(prompt))
+        messages.append(HumanMessage(prompt))
 
-    async for paso in agente.astream({
-        "messages": messages
-    }, stream_mode="values"):
-        ultimo_mensaje = paso["messages"][-1]
+        async for paso in agente.astream({
+            "messages": messages
+        }, stream_mode="values"):
+            ultimo_mensaje = paso["messages"][-1]
+            if hasattr(ultimo_mensaje, "content"):
+                final_response = ultimo_mensaje.content
 
-        if hasattr(ultimo_mensaje, "content"):
-            final_response = ultimo_mensaje.content
+        # Agregar la respuesta del asistente al historial
+        if thread_id:
+            messages.append(AIMessage(final_response))
+            print(final_response)
+            thread_history[thread_id] = messages
 
-    # Agregar la respuesta del asistente al historial
-    if thread_id:
-        messages.append(AIMessage(final_response))
-        thread_history[thread_id] = messages
+        return final_response
 
-    return final_response
-
+    except Exception as e:
+        print(f"Error: {e}")
 
 async def main():
     print("ToolChain RAG Agent - Modo Interactivo")

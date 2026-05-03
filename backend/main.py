@@ -287,7 +287,6 @@ async def chat(chat_message: ChatMessage):
         )
         print(chat_message.session_id)
 
-
         return ChatResponse(
             response=response,
             session_id=chat_message.session_id or str(hash(chat_message.message)),

@@ -12,6 +12,7 @@ langchain-community
 langchain-text-splitters
 langchain-chroma
 langchain-ollama
+langchain_mcp_adapters
 langgraph
 langgraph-checkpoint-sqlite
 chromadb
@@ -19,3 +20,4 @@ pypdf
 ocrmypdf
 
 #INSTALAR EN EL SISTEMA OPERATIVO tesseract-ocr tesseract-ocr-spa
+#Instalar npm install -g document-generator-mcp para el mcp

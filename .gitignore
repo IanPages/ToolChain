@@ -9,6 +9,7 @@ frontend/dist/
 frontend/.vite/
 backend/__pycache__/
 backend/classes/__pycache__/
+backend/classes/__pycache__
 backend/.venv/
 backend/venv/
 agents/core/__pycache__/

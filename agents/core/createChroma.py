@@ -96,8 +96,8 @@ def crear_vectorstore(embeddings, documentos):
     """
     # Text splitter para dividir documentos en chunks
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
+        chunk_size=1500,
+        chunk_overlap=300
     )
 
     # Dividir documentos en chunks
