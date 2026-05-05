@@ -12,8 +12,8 @@ import os
 CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "database", "chroma_db")
 COLLECTION_NAME = "pdfs"
 
-#modelo = ChatOllama(model="gemma4:26b", reasoning=True)
-modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
+modelo = ChatOllama(model="gemma4:26b", reasoning=True)
+#modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
 
 ######
 
@@ -32,7 +32,15 @@ PROMPT_SIST = """
     - Luego usa las herramientas de generación de documentos (gerar_documento_word o gerar_documento_pdf)
     - Asegúrate de pasar la información encontrada como contenido del documento
     
-    IMPORTANTE - Cuando el usuario mencione archivos específicos (ej: "resumen de documento.pdf"):
+    IMPORTANTE - Para generar documentos:
+    - SIEMPRE proporciona un nombre de archivo válido en el parámetro 'nome_arquivo'
+    - Usa nombres descriptivos sin espacios ni caracteres especiales (ej: "resumen_contenido.pdf", "examen_tema.pdf")
+    - Para resúmenes usa: "resumen_[tema].pdf"
+    - Para exámenes usa: "examen_[tema].pdf"
+    - Para respuestas usa: "respuestas_[tema].pdf"
+    - No digas donde esta almacenado y que puede descargarlo en esta url.
+    
+    IMPORTANTE - Cuando el usuario menciona archivos específicos (ej: "resumen de documento.pdf"):
     - Debes usar el parámetro 'sources' en informacion_rag para filtrar por esos archivos
     - Pasa sources como una lista con los nombres exactos de los archivos mencionados
     - Ejemplo: informacion_rag(query="resumen", sources=["documento.pdf", "otro.pdf"])

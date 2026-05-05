@@ -2,7 +2,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { 
   MessageSquare, 
   FileText, 
-  Download, 
   FileDown, 
   Sparkles, 
   Plus,
@@ -13,12 +12,12 @@ import {
 import type { Message, UploadedFile } from '../App'
 import { sendMessage } from '../services/chatService'
 import { getFiles, uploadFiles } from '../services/docsService'
-import { generateSummary } from '../services/toolsService'
+import { generateSummary, generateExam } from '../services/toolsService'
 import { getGeneratedFiles, deleteGeneratedFile } from '../services/generatedDocsService'
 import { useState, useEffect, useCallback } from 'react'
 import { deleteFile } from '../services/docsService'
-import FileSelectionModal from './FileSelectionModal'
-import PdfViewerModal from './PdfViewerModal'
+import FileSelectionModal from '../modals/FileSelectionModal'
+import PdfViewerModal from '../modals/PdfViewerModal'
 
 interface MainContentProps {
   messages: Message[]
@@ -36,6 +35,7 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [generatedFiles, setGeneratedFiles] = useState<UploadedFile[]>([])
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
+  const [isExamModalOpen, setIsExamModalOpen] = useState(false)
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false)
   const [selectedPdf, setSelectedPdf] = useState<{ url: string; name: string } | null>(null)
 
@@ -177,6 +177,10 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
     setIsSummaryModalOpen(true)
   }
 
+  const handleGenerateExam = () => {
+    setIsExamModalOpen(true)
+  }
+
   const handleSummarySubmit = async (selectedFiles: UploadedFile[]) => {
     setIsSummaryModalOpen(false)
     
@@ -211,6 +215,55 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: error instanceof Error ? error.message : 'Error al generar el resumen. Por favor, intenta nuevamente.',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleExamSubmit = async (selectedFiles: UploadedFile[]) => {
+    setIsExamModalOpen(false)
+    
+    const fileNames = selectedFiles.map(f => f.name).join(', ')
+    const messageContent = `Generame un examen completo y detallado basado en los ficheros ${fileNames}. El examen debe incluir:
+      1. Preguntas de opción múltiple (4 opciones cada una)
+      2. Preguntas de desarrollo
+      3. Preguntas verdadero/falso
+      4. Casos prácticos o problemas a resolver
+      5. Una hoja de respuestas separada
+
+      Después creame un fichero PDF con el examen completo.`
+    
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: messageContent,
+      timestamp: new Date()
+    }
+    
+    setMessages(prev => [...prev, newMessage])
+    setIsProcessing(true)
+    
+    try {
+      const aiResponse = await generateExam(selectedFiles, sessionId)
+      setMessages(prev => [...prev, aiResponse])
+      
+      // Recargar archivos generados después de que la IA complete la tarea
+      const generated = await getGeneratedFiles()
+      const convertedGenerated: UploadedFile[] = generated.map(file => ({
+        id: file.name,
+        name: file.name,
+        uploadedAt: new Date()
+      }))
+      setGeneratedFiles(convertedGenerated)
+      
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: error instanceof Error ? error.message : 'Error al generar el examen. Por favor, intenta nuevamente.',
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -461,21 +514,15 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
             </button>
             
             <button 
+              onClick={handleGenerateExam}
               disabled={isProcessing || uploadedFiles.length === 0}
               className="action-button"
             >
               <MessageSquare />
-              <span>Crear Cuestionario</span>
+              <span>Generar Examen</span>
             </button>
             
-            <button 
-              disabled={isProcessing || messages.length === 0}
-              className="action-button"
-            >
-              <Download />
-              <span>Descargar PDF</span>
-            </button>
-          </div>
+                      </div>
         </div>
       </aside>
 
@@ -484,6 +531,13 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
         onClose={() => setIsSummaryModalOpen(false)}
         files={uploadedFiles}
         onSubmit={handleSummarySubmit}
+      />
+
+      <FileSelectionModal
+        isOpen={isExamModalOpen}
+        onClose={() => setIsExamModalOpen(false)}
+        files={uploadedFiles}
+        onSubmit={handleExamSubmit}
       />
 
       <PdfViewerModal

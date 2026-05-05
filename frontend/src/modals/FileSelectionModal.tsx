@@ -47,7 +47,7 @@ function FileSelectionModal({ isOpen, onClose, files, onSubmit }: FileSelectionM
     <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Generar Resumen PDF</h3>
+          <h3>Generar PDF</h3>
           <button className="modal-close" onClick={handleClose}>
             <X />
           </button>
@@ -55,7 +55,7 @@ function FileSelectionModal({ isOpen, onClose, files, onSubmit }: FileSelectionM
 
         <div className="modal-body">
           <p className="modal-description">
-            Selecciona los archivos que deseas incluir en el resumen:
+            Selecciona los archivos que deseas incluir:
           </p>
 
           <div className="select-all-container">
@@ -96,7 +96,7 @@ function FileSelectionModal({ isOpen, onClose, files, onSubmit }: FileSelectionM
             onClick={handleSubmit}
             disabled={selectedFiles.size === 0}
           >
-            Enviar
+            Generar
           </button>
         </div>
       </div>
