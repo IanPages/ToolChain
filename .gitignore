@@ -14,3 +14,5 @@ backend/.venv/
 backend/venv/
 agents/core/__pycache__/
 .windsurf
+.venv
+.vscode

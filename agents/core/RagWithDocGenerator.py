@@ -7,6 +7,9 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain.tools import tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
+import torch
+from transformers import pipeline
+import soundfile as sf
 
 
 CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "database", "chroma_db")
@@ -15,22 +18,23 @@ COLLECTION_NAME = "pdfs"
 modelo = ChatOllama(model="gemma4:26b", reasoning=True)
 #modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
 
-######
-
-#SQLITESAVER PARA EL CHECKPOINTER
-
-#######
 thread_history = {}
 
 PROMPT_SIST = """
     Eres un asistente inteligente que puede:
     1. Buscar información en la base de datos vectorial (RAG) usando la herramienta informacion_rag
     2. Generar documentos Word o PDF usando las herramientas del MCP document-generator
+    3. Generar audio a partir de texto usando la herramienta generar_audio
     
     Cuando el usuario pida generar un documento basado en información:
     - Primero usa informacion_rag para buscar la información relevante
     - Luego usa las herramientas de generación de documentos (gerar_documento_word o gerar_documento_pdf)
     - Asegúrate de pasar la información encontrada como contenido del documento
+    
+    Cuando el usuario pida generar audio:
+    - Usa generar_audio para convertir texto a audio
+    - Puedes usar información obtenida de informacion_rag como contenido para el audio
+    - Proporciona un nombre descriptivo para el archivo de audio
     
     IMPORTANTE - Para generar documentos:
     - SIEMPRE proporciona un nombre de archivo válido en el parámetro 'nome_arquivo'
@@ -39,6 +43,10 @@ PROMPT_SIST = """
     - Para exámenes usa: "examen_[tema].pdf"
     - Para respuestas usa: "respuestas_[tema].pdf"
     - No digas donde esta almacenado y que puede descargarlo en esta url.
+    
+    IMPORTANTE - Para generar audio:
+    - Usa nombres descriptivos para los archivos (ej: "resumen_audio.wav", "explicacion_tema.wav")
+    - El audio se guardará automáticamente en el directorio de salidas
     
     IMPORTANTE - Cuando el usuario menciona archivos específicos (ej: "resumen de documento.pdf"):
     - Debes usar el parámetro 'sources' en informacion_rag para filtrar por esos archivos
@@ -117,6 +125,40 @@ def informacion_rag(query: str, sources: list = None):
     
     return resultado
 
+
+@tool
+def generar_audio(texto: str, nombre_archivo: str = "audio_generado.wav"):
+    """
+    Genera audio a partir de texto usando un modelo TTS de Hugging Face.
+    
+    Args:
+        texto: El texto que se desea convertir a audio
+        nombre_archivo: Nombre del archivo de audio a generar (default: "audio_generado.wav")
+    
+    Returns:
+        str: Ruta del archivo de audio generado y mensaje de confirmación
+    """
+    try:
+
+        synthesiser = pipeline("text-to-speech", model="microsoft/speecht5_tts")
+        
+        # Generar el audio
+        speech = synthesiser(texto)
+        
+        # Crear directorio de salida si no existe
+        output_dir = os.path.join(os.path.dirname(__file__), "..", "..", "outputs")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Guardar el archivo de audio
+        output_path = os.path.join(output_dir, nombre_archivo)
+        sf.write(output_path, speech["audio"], samplerate=speech["sampling_rate"])
+        
+        return f"Audio generado: {output_path}"
+        
+    except Exception as e:
+        return f"Error al generar audio: {str(e)}"
+
+
 async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_id: str = None):
     """
     Procesa un mensaje usando el agente RAG.
@@ -143,9 +185,9 @@ async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_
 
             # Obtener herramientas del MCP
             mcp_tools = await client.get_tools()
-            todas_herramientas = [informacion_rag] + mcp_tools
+            todas_herramientas = [informacion_rag, generar_audio] + mcp_tools
         else:
-            todas_herramientas = [informacion_rag]
+            todas_herramientas = [informacion_rag, generar_audio]
 
         # Crear agente
         agente = create_agent(

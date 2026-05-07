@@ -2,9 +2,10 @@
 #Backend
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
-pydantic==2.9.0
+pydantic==2.12.0
 python-multipart==0.0.12
-aiofiles==24.1.0
+aiofiles==25.1.0
+numpy>=1.21.0
 
 #Agentes
 langchain
@@ -18,6 +19,14 @@ langgraph-checkpoint-sqlite
 chromadb
 pypdf
 ocrmypdf
+
+#tts
+torch
+torchaudio
+soundfile
+transformers
+datasets
+librosa
 
 #INSTALAR EN EL SISTEMA OPERATIVO tesseract-ocr tesseract-ocr-spa
 #Instalar npm install -g document-generator-mcp para el mcp
