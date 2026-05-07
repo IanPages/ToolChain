@@ -18,6 +18,7 @@ COLLECTION_NAME = "pdfs"
 modelo = ChatOllama(model="gemma4:26b", reasoning=True)
 #modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
 
+#Mantener hasta implementar en versiones futuras sqlite 
 thread_history = {}
 
 PROMPT_SIST = """
@@ -139,8 +140,15 @@ def generar_audio(texto: str, nombre_archivo: str = "audio_generado.wav"):
         str: Ruta del archivo de audio generado y mensaje de confirmación
     """
     try:
+        ###ARREGLAR YA QUE NO GENERA, SI NO SE CONSIGUE SOLUCION usar SUNO/BARK
 
-        synthesiser = pipeline("text-to-speech", model="microsoft/speecht5_tts")
+        # Usar un modelo TTS optimizado para español
+        # Modelo específico para español con Transformer
+        synthesiser = pipeline(
+            "text-to-speech", 
+            model="facebook/tts_transformer-es-css10",
+            model_kwargs={"use_fast_tokenizer": True}
+        )
         
         # Generar el audio
         speech = synthesiser(texto)

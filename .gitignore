@@ -16,3 +16,4 @@ agents/core/__pycache__/
 .windsurf
 .venv
 .vscode
+outputs/

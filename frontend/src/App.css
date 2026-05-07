@@ -629,6 +629,31 @@ body {
   color: var(--accent-primary);
 }
 
+.action-button .typing-indicator {
+  display: flex;
+  gap: 4px;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-button .typing-indicator span {
+  width: 4px;
+  height: 4px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  animation: typing 1.4s infinite;
+}
+
+.action-button .typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.action-button .typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .sidebar {

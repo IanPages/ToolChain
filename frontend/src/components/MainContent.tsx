@@ -7,16 +7,19 @@ import {
   Plus,
   Send,
   Trash2,
-  X
+  X,
+  Volume2
 } from 'lucide-react'
 import type { Message, UploadedFile } from '../App'
 import { sendMessage } from '../services/chatService'
 import { getFiles, uploadFiles } from '../services/docsService'
 import { generateSummary, generateExam } from '../services/toolsService'
+import { generateAudio } from '../services/audioService'
 import { getGeneratedFiles, deleteGeneratedFile } from '../services/generatedDocsService'
 import { useState, useEffect, useCallback } from 'react'
 import { deleteFile } from '../services/docsService'
 import FileSelectionModal from '../modals/FileSelectionModal'
+import AudioSelectionModal from '../modals/AudioSelectionModal'
 import PdfViewerModal from '../modals/PdfViewerModal'
 
 interface MainContentProps {
@@ -36,8 +39,14 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
   const [generatedFiles, setGeneratedFiles] = useState<UploadedFile[]>([])
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
   const [isExamModalOpen, setIsExamModalOpen] = useState(false)
+  const [isAudioModalOpen, setIsAudioModalOpen] = useState(false)
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false)
   const [selectedPdf, setSelectedPdf] = useState<{ url: string; name: string } | null>(null)
+  
+  // Loading states para botones de acción
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
+  const [isGeneratingExam, setIsGeneratingExam] = useState(false)
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
 
   // Cargar archivos desde la API al montar el componente
   
@@ -181,21 +190,13 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
     setIsExamModalOpen(true)
   }
 
+  const handleGenerateAudio = () => {
+    setIsAudioModalOpen(true)
+  }
+
   const handleSummarySubmit = async (selectedFiles: UploadedFile[]) => {
     setIsSummaryModalOpen(false)
-    
-    const fileNames = selectedFiles.map(f => f.name).join(', ')
-    const messageContent = `Generame un resumen detallado y extenso con los ficheros ${fileNames} y después creame un fichero PDF con el contenido generado.`
-    
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: messageContent,
-      timestamp: new Date()
-    }
-    
-    setMessages(prev => [...prev, newMessage])
-    setIsProcessing(true)
+    setIsGeneratingSummary(true)
     
     try {
       const aiResponse = await generateSummary(selectedFiles, sessionId)
@@ -219,32 +220,13 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
       }
       setMessages(prev => [...prev, errorMessage])
     } finally {
-      setIsProcessing(false)
+      setIsGeneratingSummary(false)
     }
   }
 
   const handleExamSubmit = async (selectedFiles: UploadedFile[]) => {
     setIsExamModalOpen(false)
-    
-    const fileNames = selectedFiles.map(f => f.name).join(', ')
-    const messageContent = `Generame un examen completo y detallado basado en los ficheros ${fileNames}. El examen debe incluir:
-      1. Preguntas de opción múltiple (4 opciones cada una)
-      2. Preguntas de desarrollo
-      3. Preguntas verdadero/falso
-      4. Casos prácticos o problemas a resolver
-      5. Una hoja de respuestas separada
-
-      Después creame un fichero PDF con el examen completo.`
-    
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: messageContent,
-      timestamp: new Date()
-    }
-    
-    setMessages(prev => [...prev, newMessage])
-    setIsProcessing(true)
+    setIsGeneratingExam(true)
     
     try {
       const aiResponse = await generateExam(selectedFiles, sessionId)
@@ -268,7 +250,37 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
       }
       setMessages(prev => [...prev, errorMessage])
     } finally {
-      setIsProcessing(false)
+      setIsGeneratingExam(false)
+    }
+  }
+
+  const handleAudioSubmit = async (selectedFiles: UploadedFile[]) => {
+    setIsAudioModalOpen(false)
+    setIsGeneratingAudio(true)
+    
+    try {
+      const aiResponse = await generateAudio(selectedFiles, sessionId)
+      setMessages(prev => [...prev, aiResponse])
+      
+      // Recargar archivos generados después de que la IA complete la tarea
+      const generated = await getGeneratedFiles()
+      const convertedGenerated: UploadedFile[] = generated.map(file => ({
+        id: file.name,
+        name: file.name,
+        uploadedAt: new Date()
+      }))
+      setGeneratedFiles(convertedGenerated)
+      
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: error instanceof Error ? error.message : 'Error al generar el audio. Por favor, intenta nuevamente.',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsGeneratingAudio(false)
     }
   }
 
@@ -506,20 +518,53 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
           <div className="actions-grid">
             <button 
               onClick={handleGenerateSummary}
-              disabled={isProcessing || uploadedFiles.length === 0}
+              disabled={isProcessing || uploadedFiles.length === 0 || isGeneratingSummary}
               className="action-button"
             >
-              <FileText />
-              <span>Generar Resumen</span>
+              {isGeneratingSummary ? (
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              ) : (
+                <FileText />
+              )}
+              <span>{isGeneratingSummary ? 'Generando...' : 'Generar Resumen'}</span>
             </button>
             
             <button 
               onClick={handleGenerateExam}
-              disabled={isProcessing || uploadedFiles.length === 0}
+              disabled={isProcessing || uploadedFiles.length === 0 || isGeneratingExam}
               className="action-button"
             >
-              <MessageSquare />
-              <span>Generar Examen</span>
+              {isGeneratingExam ? (
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              ) : (
+                <MessageSquare />
+              )}
+              <span>{isGeneratingExam ? 'Generando...' : 'Generar Examen'}</span>
+            </button>
+            
+            <button 
+              onClick={handleGenerateAudio}
+              disabled={isProcessing || uploadedFiles.length === 0 || isGeneratingAudio}
+              className="action-button"
+            >
+              {isGeneratingAudio ? (
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              ) : (
+                <Volume2 />
+              )}
+              <span>{isGeneratingAudio ? 'Generando...' : 'Generar Audio'}</span>
             </button>
             
                       </div>
@@ -538,6 +583,13 @@ function MainContent({messages,setMessages,inputValue,setInputValue,isProcessing
         onClose={() => setIsExamModalOpen(false)}
         files={uploadedFiles}
         onSubmit={handleExamSubmit}
+      />
+
+      <AudioSelectionModal
+        isOpen={isAudioModalOpen}
+        onClose={() => setIsAudioModalOpen(false)}
+        files={uploadedFiles}
+        onSubmit={handleAudioSubmit}
       />
 
       <PdfViewerModal

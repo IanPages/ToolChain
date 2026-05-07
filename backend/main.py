@@ -173,10 +173,10 @@ async def delete_file(filename: str):
 @app.get("/generated-files", response_model=List[FileInfo])
 async def get_generated_files():
     """
-    Obtiene información sobre los archivos generados por la IA en la carpeta generated_documents
+    Obtiene información sobre los archivos generados por la IA en la carpeta outputs
     """
     try:
-        generated_dir = os.path.join(os.path.dirname(__file__), "generated_documents")
+        generated_dir = os.path.join(os.path.dirname(__file__), "..", "outputs")
         
         if not os.path.exists(generated_dir):
             return []
@@ -206,7 +206,7 @@ async def get_generated_file(filename: str):
         # Decodificar el filename para manejar espacios y caracteres especiales
         filename_decoded = unquote(filename)
  
-        generated_dir = os.path.join(os.path.dirname(__file__), "generated_documents")
+        generated_dir = os.path.join(os.path.dirname(__file__), "..", "outputs")
         file_path = os.path.join(generated_dir, filename_decoded)
  
         if not os.path.exists(file_path):
@@ -240,14 +240,14 @@ async def get_generated_file(filename: str):
 @app.delete("/generated-files/{filename}", response_model=DeleteResponse)
 async def delete_generated_file(filename: str):
     """
-    Elimina un archivo generado de la carpeta generated_documents
+    Elimina un archivo generado de la carpeta outputs
     """
     try:
         # Decodificar el filename para manejar espacios y caracteres especiales
         from urllib.parse import unquote
         filename_decoded = unquote(filename)
         
-        generated_dir = os.path.join(os.path.dirname(__file__), "generated_documents")
+        generated_dir = os.path.join(os.path.dirname(__file__), "..", "outputs")
         file_path = os.path.join(generated_dir, filename_decoded)
         
         if not os.path.exists(file_path):
