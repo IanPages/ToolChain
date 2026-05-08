@@ -10,13 +10,15 @@ import os
 import torch
 from transformers import pipeline
 import soundfile as sf
+from bark import SAMPLE_RATE, generate_audio, preload_models
+from scipy.io.wavfile import write as write_wav
 
 
 CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "database", "chroma_db")
 COLLECTION_NAME = "pdfs"
 
-modelo = ChatOllama(model="gemma4:26b", reasoning=True)
-#modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
+#modelo = ChatOllama(model="gemma4:26b", reasoning=True)
+modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
 
 #Mantener hasta implementar en versiones futuras sqlite 
 thread_history = {}
@@ -47,7 +49,7 @@ PROMPT_SIST = """
     
     IMPORTANTE - Para generar audio:
     - Usa nombres descriptivos para los archivos (ej: "resumen_audio.wav", "explicacion_tema.wav")
-    - El audio se guardará automáticamente en el directorio de salidas
+    - El audio se guardará automáticamente en el directorio backend/generated_documents
     
     IMPORTANTE - Cuando el usuario menciona archivos específicos (ej: "resumen de documento.pdf"):
     - Debes usar el parámetro 'sources' en informacion_rag para filtrar por esos archivos
@@ -130,7 +132,7 @@ def informacion_rag(query: str, sources: list = None):
 @tool
 def generar_audio(texto: str, nombre_archivo: str = "audio_generado.wav"):
     """
-    Genera audio a partir de texto usando un modelo TTS de Hugging Face.
+    Genera audio a partir de texto usando Suno/Bark TTS.
     
     Args:
         texto: El texto que se desea convertir a audio
@@ -140,31 +142,25 @@ def generar_audio(texto: str, nombre_archivo: str = "audio_generado.wav"):
         str: Ruta del archivo de audio generado y mensaje de confirmación
     """
     try:
-        ###ARREGLAR YA QUE NO GENERA, SI NO SE CONSIGUE SOLUCION usar SUNO/BARK
-
-        # Usar un modelo TTS optimizado para español
-        # Modelo específico para español con Transformer
-        synthesiser = pipeline(
-            "text-to-speech", 
-            model="facebook/tts_transformer-es-css10",
-            model_kwargs={"use_fast_tokenizer": True}
-        )
+        # Pre-cargar modelos de Bark (solo la primera vez)
+        preload_models()
         
-        # Generar el audio
-        speech = synthesiser(texto)
+        # Generar audio con Bark
+        # Usar español como idioma por defecto
+        audio_array = generate_audio(texto, voice_preset="v2/es_speaker_1")
         
         # Crear directorio de salida si no existe
-        output_dir = os.path.join(os.path.dirname(__file__), "..", "..", "outputs")
+        output_dir = os.path.join(os.path.dirname(__file__), "..", "..", "backend", "generated_documents")
         os.makedirs(output_dir, exist_ok=True)
         
         # Guardar el archivo de audio
         output_path = os.path.join(output_dir, nombre_archivo)
-        sf.write(output_path, speech["audio"], samplerate=speech["sampling_rate"])
+        write_wav(output_path, SAMPLE_RATE, audio_array)
         
-        return f"Audio generado: {output_path}"
+        return f"Audio generado con Bark: {output_path}"
         
     except Exception as e:
-        return f"Error al generar audio: {str(e)}"
+        return f"Error al generar audio con Bark: {str(e)}"
 
 
 async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_id: str = None):

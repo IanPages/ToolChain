@@ -41,7 +41,7 @@ def cargar_documentos_desde_bytes(archivo_bytes: bytes, nombre_archivo: str):
     tmp_paths = []
 
     try:
-        # Guardar PDF original temporalmente
+        # Guardar PDF original temporalmente ya que PyPDF no trabaja con bytes sino con rutas
         with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
             tmp.write(archivo_bytes)
             tmp_path = tmp.name

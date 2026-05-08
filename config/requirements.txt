@@ -21,12 +21,15 @@ pypdf
 ocrmypdf
 
 #tts
-torch
-torchaudio
+torch==2.9.0
+torchaudio==2.9.0
 soundfile
 transformers
 datasets
 librosa
+bark
+encodec
+scipy
 
 #INSTALAR EN EL SISTEMA OPERATIVO tesseract-ocr tesseract-ocr-spa
 #Instalar npm install -g document-generator-mcp para el mcp

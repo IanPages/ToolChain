@@ -31,6 +31,8 @@ function App() {
       setIsMobile(window.innerWidth < 768)
       if (window.innerWidth < 768) {
         setSidebarOpen(false)
+      } else {
+        setSidebarOpen(true)
       }
     }
     
