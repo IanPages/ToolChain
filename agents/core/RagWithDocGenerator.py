@@ -17,8 +17,8 @@ from scipy.io.wavfile import write as write_wav
 CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "database", "chroma_db")
 COLLECTION_NAME = "pdfs"
 
-#modelo = ChatOllama(model="gemma4:26b", reasoning=True)
-modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
+modelo = ChatOllama(model="gemma4:26b", reasoning=True)
+#modelo = ChatOllama(model="gemma4:e2b", reasoning=True)
 
 #Mantener hasta implementar en versiones futuras sqlite 
 thread_history = {}
