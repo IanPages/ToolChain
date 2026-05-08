@@ -6,7 +6,7 @@ ToolChain resuelve el problema de gestión y consulta eficiente de grandes volú
 
 - **Indexar y buscar** contenido en múltiples documentos PDF de manera inteligente
 - **Generar resúmenes, exámenes y otros documentos** basados en el contenido de los archivos
-- **Convertir texto a audio** para facilitar el consumo de información
+- **Convertir texto a audio** usando ElevenLabs API para generar audio de alta calidad
 - **Interactuar conversacionalmente** con el contenido de los documentos mediante un asistente IA
 
 La aplicación utiliza técnicas de RAG (Retrieval-Augmented Generation) para proporcionar respuestas precisas basadas exclusivamente en el contenido de los documentos indexados, evitando alucinaciones de la IA.
@@ -25,7 +25,7 @@ El sistema integra IA de múltiples formas:
 El sistema implementa un agente IA con acceso a herramientas especializadas:
 
 - **`informacion_rag`**: Busca información en la base vectorial con filtrado por fuentes
-- **`generar_audio`**: Convierte texto a audio usando Suno/Bark TTS
+- **`generar_audio`**: Convierte texto a audio usando ElevenLabs API con voces profesionales
 - **Herramientas MCP**: Conecta con `document-generator-mcp` para crear documentos Word/PDF
 
 ### 3. **OCR Automático**
@@ -105,7 +105,7 @@ ToolChain/
 
 #### LangChain Tools
 - **`informacion_rag`**: Búsqueda semántica en ChromaDB con filtrado por fuentes
-- **`generar_audio`**: TTS con Suno/Bark para generar audio en español
+- **`generar_audio`**: TTS con ElevenLabs API para generar audio de alta calidad en español
 
 #### MCP Tools (document-generator-mcp)
 - **`gerar_documento_word`**: Genera documentos Word
@@ -135,7 +135,7 @@ ToolChain/
 - **LangGraph** - Orquestación de workflows
 - **Ollama** - LLM local (gemma4:e2b, mxbai-embed-large)
 - **ChromaDB** - Base vectorial
-- **Bark (Suno)** - Text-to-Speech
+- **ElevenLabs** - Text-to-Speech API profesional
 - **Transformers (Hugging Face)** - Modelos NLP
 - **PyTorch 2.9.0** - Framework deep learning
 
@@ -159,6 +159,7 @@ ToolChain/
    - Linux: `sudo apt install tesseract-ocr tesseract-ocr-spa`
    - macOS: `brew install tesseract tesseract-lang`
 5. **npm** (para MCP): `npm install -g document-generator-mcp`
+6. **ElevenLabs API Key**: Obtener en https://elevenlabs.io
 
 ### 1. Instalar Dependencias Python
 
@@ -167,7 +168,16 @@ cd ToolChain
 pip install -r config/requirements.txt
 ```
 
-### 2. Instalar Modelo Ollama
+### 2. Configurar Variables de Entorno
+
+Crear archivo `.env` en la raíz del proyecto:
+
+```bash
+# ElevenLabs API Key
+ELEVEN_API=tu_api_key_aqui
+```
+
+### 3. Instalar Modelo Ollama
 
 ```bash
 # Instalar Ollama si no lo tienes
@@ -181,7 +191,7 @@ ollama pull mxbai-embed-large
 ollama serve
 ```
 
-### 3. Iniciar Backend FastAPI
+### 4. Iniciar Backend FastAPI
 
 ```bash
 cd backend
@@ -192,7 +202,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 El backend estará disponible en `http://localhost:8000`
 
-### 4. Iniciar Frontend React
+### 5. Iniciar Frontend React
 
 ```bash
 cd frontend
@@ -202,7 +212,7 @@ npm run dev
 
 El frontend estará disponible en `http://localhost:5173`
 
-### 5. Verificar Instalación
+### 6. Verificar Instalación
 
 - **Health Check**: `http://localhost:8000/health`
 - **API Docs**: `http://localhost:8000/docs`
@@ -243,6 +253,13 @@ El frontend estará disponible en `http://localhost:5173`
 - [ ] Añadir sistema de usuarios y autenticación
 - [ ] Permitir múltiples conversaciones/RAGs independientes
 - [ ] Aumentar limite máximo de subida de fichero
+
+
+## Problemas Encontrados
+
+- Implementación de modelo TTS debido al alto fallo y requisitos para cada modelo
+- Subida de ficheros PDFS, debido a implementacion con OCR
+- Estilado del frontend
 
 
 

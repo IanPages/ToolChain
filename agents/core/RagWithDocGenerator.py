@@ -7,11 +7,6 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain.tools import tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
-import torch
-from transformers import pipeline
-import soundfile as sf
-from bark import SAMPLE_RATE, generate_audio, preload_models
-from scipy.io.wavfile import write as write_wav
 
 
 CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "database", "chroma_db")
@@ -130,37 +125,75 @@ def informacion_rag(query: str, sources: list = None):
 
 
 @tool
-def generar_audio(texto: str, nombre_archivo: str = "audio_generado.wav"):
+def generar_audio(texto: str, nombre_archivo: str = None, voice_id: str = "BCPuhhETu0nx5trUsFCB"):
     """
-    Genera audio a partir de texto usando Suno/Bark TTS.
+    Genera audio a partir de texto usando ElevenLabs API.
     
     Args:
         texto: El texto que se desea convertir a audio
-        nombre_archivo: Nombre del archivo de audio a generar (default: "audio_generado.wav")
+        nombre_archivo: Nombre del archivo de audio a generar (opcional, se genera automáticamente si no se proporciona)
+        voice_id: ID de voz de ElevenLabs (default: "rachel")
     
     Returns:
-        str: Ruta del archivo de audio generado y mensaje de confirmación
+        str: Mensaje de confirmación con la ruta del archivo de audio generado
     """
     try:
-        # Pre-cargar modelos de Bark (solo la primera vez)
-        preload_models()
+        import os
+        from dotenv import load_dotenv
+        from elevenlabs import ElevenLabs
+        from datetime import datetime
+        import uuid
         
-        # Generar audio con Bark
-        # Usar español como idioma por defecto
-        audio_array = generate_audio(texto, voice_preset="v2/es_speaker_1")
+        # Cargar variables de entorno
+        load_dotenv()
+        api_key = os.getenv("ELEVEN_API")
         
-        # Crear directorio de salida si no existe
+        if not api_key:
+            return "❌ Error: No se encontró ELEVEN_API en el archivo .env"
+        
+        # Validar que el texto no esté vacío
+        if not texto or not texto.strip():
+            return "Error: El texto no puede estar vacío"
+        
+        # Limitar el texto para ElevenLabs (permite más caracteres)
+        texto_limitado = texto.strip()[:5000]
+        print(texto_limitado)
+
+        
+        # Crear cliente de ElevenLabs
+        client = ElevenLabs(api_key=api_key)
+        
+        # Generar audio
+        response_generator = client.text_to_speech.convert(
+            text=texto_limitado,
+            voice_id=voice_id,
+            output_format="mp3_44100_128"
+        )
+        
+        # Concatenar todos los chunks del generador
+        audio_data = b""
+        for chunk in response_generator:
+            audio_data += chunk
+        
+        print(f"Tamaño total del audio: {len(audio_data)} bytes")
+        
+        # Crear directorio de salida si no existe (backend/generated_documents)
         output_dir = os.path.join(os.path.dirname(__file__), "..", "..", "backend", "generated_documents")
         os.makedirs(output_dir, exist_ok=True)
         
         # Guardar el archivo de audio
         output_path = os.path.join(output_dir, nombre_archivo)
-        write_wav(output_path, SAMPLE_RATE, audio_array)
         
-        return f"Audio generado con Bark: {output_path}"
+        # Escribir el archivo de audio
+        with open(output_path, "wb") as f:
+            f.write(audio_data)
+        
+        return f"✅ Audio generado exitosamente con ElevenLabs: {nombre_archivo}\n📁 Guardado en: backend/generated_documents/{nombre_archivo}\n🎤 Voz utilizada: {voice_id}"
         
     except Exception as e:
-        return f"Error al generar audio con Bark: {str(e)}"
+        print(f"ERROR ELEVENLABS: {str(e)}")
+        print(f"TEXTO PROCESADO: {texto_limitado[:100]}...")
+        return f"❌ Error al generar audio con ElevenLabs: {str(e)}"
 
 
 async def process_message_with_agent(prompt: str, use_mcp: bool = False, thread_id: str = None):

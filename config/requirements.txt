@@ -20,15 +20,10 @@ chromadb
 pypdf
 ocrmypdf
 
-#tts
-torch==2.9.0
-torchaudio==2.9.0
-soundfile
-transformers
-datasets
-librosa
-bark
-encodec
+#TTS (solo ElevenLabs)
+elevenlabs
+
+#Procesamiento de audio
 scipy
 
 #INSTALAR EN EL SISTEMA OPERATIVO tesseract-ocr tesseract-ocr-spa
