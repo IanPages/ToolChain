@@ -255,6 +255,11 @@ El frontend estará disponible en `http://localhost:5173`
 - [ ] Aumentar limite máximo de subida de fichero
 
 
+### Curiosidades
+- [ ] Implementación de subida fichero a Google Drive con N8N
+- [ ] Futuras implementaciones N8N (alertas,envío de ficheros a terceros,...)
+
+
 ## Problemas Encontrados
 
 - Implementación de modelo TTS debido al alto fallo y requisitos para cada modelo
